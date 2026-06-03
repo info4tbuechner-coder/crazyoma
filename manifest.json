@@ -1,0 +1,23 @@
+{
+  "short_name": "Crazy Oma",
+  "name": "Crazy Oma - Narzissmus-Analyse",
+  "description": "Eine Webanwendung, die Gesprächsprotokolle mithilfe der Gemini API auf narzisstische Kommunikationsmuster analysiert und Ratschläge im Stil einer weisen, direkten Großmutter gibt.",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#020617",
+  "background_color": "#020617"
+}

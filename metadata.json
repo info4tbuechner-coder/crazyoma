@@ -1,0 +1,8 @@
+{
+  "name": "Crazy Oma - Narzissmus-Analyse",
+  "description": "Eine Webanwendung, die Gesprächsprotokolle mithilfe der Gemini API auf narzisstische Kommunikationsmuster analysiert und Ratschläge im Stil einer weisen, direkten Großmutter gibt.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}

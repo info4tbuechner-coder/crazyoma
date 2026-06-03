@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crazy Oma - Narzissmus-Analyse</title>
+
+    <!-- PWA Tags -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#020617" />
+    <link rel="apple-touch-icon" href="/icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Crazy Oma">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* This provides a fallback for the custom font, ensuring smooth rendering */
+        body {
+            font-family: 'Poppins', sans-serif;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Poppins', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                    colors: {
+                        'primary-start': '#a855f7', // purple-500
+                        'primary-end': '#ec4899', // pink-500
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out forwards',
+                        'fade-in-up': 'fadeInUp 0.6s ease-out forwards',
+                        'pulse-ring': 'pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'shimmer': 'shimmer 2s linear infinite',
+                        'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both',
+                        'slide-in-left': 'slideInLeft 0.5s ease-out forwards',
+                        'slide-in-right': 'slideInRight 0.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: 0 },
+                            '100%': { opacity: 1 },
+                        },
+                        fadeInUp: {
+                            '0%': { opacity: 0, transform: 'translateY(20px)' },
+                            '100%': { opacity: 1, transform: 'translateY(0)' },
+                        },
+                        pulseRing: {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { transform: 'scale(1.5)', opacity: 0 },
+                        },
+                        shimmer: {
+                            '0%': { background-position: '-1000px 0' },
+                            '100%': { background-position: '1000px 0' },
+                        },
+                        shake: {
+                            '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                            '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                            '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                            '40%, 60%': { transform: 'translate3d(4px, 0, 0)' },
+                        },
+                        slideInLeft: {
+                            '0%': { opacity: 0, transform: 'translateX(-20px)' },
+                            '100%': { opacity: 1, transform: 'translateX(0)' },
+                        },
+                        slideInRight: {
+                            '0%': { opacity: 0, transform: 'translateX(20px)' },
+                            '100%': { opacity: 1, transform: 'translateX(0)' },
+                        }
+                    },
+                },
+            },
+        };
+    </script>
+<script type="importmap">
+{
+  "imports": {
+    "pdfjs-dist": "https://aistudiocdn.com/pdfjs-dist@^5.4.296",
+    "pdfjs-dist/": "https://aistudiocdn.com/pdfjs-dist@^5.4.296/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@headlessui/react": "https://aistudiocdn.com/@headlessui/react@^2.2.9",
+    "recharts": "https://aistudiocdn.com/recharts@^2.12.7"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-slate-950">
+    <div id="root"></div>
+    <div id="print-root" class="hidden"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
