@@ -51,69 +51,94 @@ declare global {
 
 export const useSpeechRecognition = (onResult: (transcript: string) => void) => {
     const [isListening, setIsListening] = useState(false);
+    const [isSupported, setIsSupported] = useState(false);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const onResultRef = useRef(onResult);
+    const isListeningRef = useRef(isListening);
+
+    // Keep refs up to date to avoid enclosing outdated state / callbacks
+    useEffect(() => {
+        onResultRef.current = onResult;
+    }, [onResult]);
+
+    useEffect(() => {
+        isListeningRef.current = isListening;
+    }, [isListening]);
 
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
             console.warn("Speech recognition not supported in this browser.");
+            setIsSupported(false);
             return;
         }
 
+        setIsSupported(true);
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'de-DE';
 
-        // FIX: Added type for the event parameter.
         recognition.onresult = (event: SpeechRecognitionEvent) => {
-            let interimTranscript = '';
             let finalTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
                     finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
                 }
             }
             if (finalTranscript) {
-                onResult(finalTranscript);
+                onResultRef.current(finalTranscript);
             }
         };
         
         recognition.onend = () => {
-            if (isListening) {
-              // Restart recognition if it stops unexpectedly while we still want to be listening
-              recognition.start();
+            if (isListeningRef.current) {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error("Failed to auto-restart speech recognition:", e);
+                }
             } else {
-              setIsListening(false);
+                setIsListening(false);
             }
         };
         
-        // FIX: Added type for the event parameter.
         recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
             console.error('Speech recognition error', event.error);
+            if (event.error === 'no-speech') {
+                return; // Suppress stopping on transient silence
+            }
             setIsListening(false);
         };
 
         recognitionRef.current = recognition;
 
         return () => {
-            recognition.stop();
+            try {
+                recognition.abort();
+            } catch (e) {}
         };
-    }, [onResult, isListening]);
+    }, []);
 
     const start = () => {
         if (recognitionRef.current && !isListening) {
-            recognitionRef.current.start();
-            setIsListening(true);
+            try {
+                recognitionRef.current.start();
+                setIsListening(true);
+            } catch (e) {
+                console.error('Error starting speech recognition:', e);
+            }
         }
     };
 
     const stop = () => {
         if (recognitionRef.current && isListening) {
-            recognitionRef.current.stop();
-            setIsListening(false);
+            try {
+                recognitionRef.current.stop();
+                setIsListening(false);
+            } catch (e) {
+                console.error('Error stopping speech recognition:', e);
+            }
         }
     };
 
@@ -125,5 +150,5 @@ export const useSpeechRecognition = (onResult: (transcript: string) => void) => 
         }
     };
 
-    return { isListening, toggle };
+    return { isListening, isSupported, toggle };
 };

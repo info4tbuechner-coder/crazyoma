@@ -1,24 +1,32 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { sendChatMessage, generateOmaSpeech, playPcmAudio } from '../services/geminiService';
-import type { ChatMessage } from '../types';
+import { sendChatMessage, generateOmaSpeech, playPcmAudio, stopCurrentSpeech } from '../services/geminiService';
+import type { ChatMessage, AnalysisResult } from '../types';
 import Button from './ui/Button';
 import { SpeakerIcon, ChatIcon } from './ui/Icons';
 
 interface OmaChatProps {
-    analysisId: string;
+    result: AnalysisResult;
 }
 
-const OmaChat: React.FC<OmaChatProps> = ({ analysisId }) => {
+const OmaChat: React.FC<OmaChatProps> = ({ result }) => {
+    const analysisId = result.id;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isSpeaking, setIsSpeaking] = useState(false);
+    const [currentlySpeaking, setCurrentlySpeaking] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }, [messages]);
+
+    useEffect(() => {
+        // Stop speech when the chat is unmounted or analysisId changes
+        return () => {
+            stopCurrentSpeech().catch(() => {});
+        };
+    }, [analysisId]);
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
@@ -29,7 +37,7 @@ const OmaChat: React.FC<OmaChatProps> = ({ analysisId }) => {
         setIsLoading(true);
 
         try {
-            const omaText = await sendChatMessage(analysisId, input, messages);
+            const omaText = await sendChatMessage(analysisId, input, result);
             const omaMsg: ChatMessage = { role: 'model', text: omaText, timestamp: Date.now() };
             setMessages(prev => [...prev, omaMsg]);
         } catch (err) {
@@ -40,15 +48,21 @@ const OmaChat: React.FC<OmaChatProps> = ({ analysisId }) => {
     };
 
     const handleSpeak = async (text: string) => {
-        if (isSpeaking) return;
-        setIsSpeaking(true);
+        if (currentlySpeaking === text) {
+            await stopCurrentSpeech();
+            setCurrentlySpeaking(null);
+            return;
+        }
+        
+        setCurrentlySpeaking(text);
         try {
             const pcm = await generateOmaSpeech(text);
             await playPcmAudio(pcm);
         } catch (err) {
             console.error(err);
+            setCurrentlySpeaking(null);
         } finally {
-            setIsSpeaking(false);
+            setCurrentlySpeaking(prev => prev === text ? null : prev);
         }
     };
 
@@ -79,10 +93,14 @@ const OmaChat: React.FC<OmaChatProps> = ({ analysisId }) => {
                                 {msg.role === 'model' && (
                                     <button 
                                         onClick={() => handleSpeak(msg.text)}
-                                        className="absolute -right-10 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-pink-400 opacity-0 group-hover:opacity-100 transition-all"
+                                        className={`absolute -right-10 top-1/2 -translate-y-1/2 p-2 transition-all ${
+                                            currentlySpeaking === msg.text 
+                                                ? 'text-pink-500 opacity-100' 
+                                                : 'text-slate-500 hover:text-pink-400 opacity-0 group-hover:opacity-100'
+                                        }`}
                                         title="Oma vorlesen lassen"
                                     >
-                                        <SpeakerIcon className={`h-4 w-4 ${isSpeaking ? 'animate-pulse text-pink-500' : ''}`} />
+                                        <SpeakerIcon className={`h-4 w-4 ${currentlySpeaking === msg.text ? 'animate-pulse' : ''}`} />
                                     </button>
                                 )}
                             </div>

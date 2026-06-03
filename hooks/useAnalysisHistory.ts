@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { collection, query, orderBy, limit, getDocs, setDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../AuthContext';
@@ -10,6 +10,12 @@ const MAX_HISTORY_ITEMS = 50;
 export const useAnalysisHistory = () => {
     const [history, setHistory] = useState<AnalysisResult[]>([]);
     const { user } = useAuth();
+    const historyRef = useRef<AnalysisResult[]>([]);
+
+    // Maintain historyRef for stable callback dependencies
+    useEffect(() => {
+        historyRef.current = history;
+    }, [history]);
 
     useEffect(() => {
         const fetchHistory = async () => {
@@ -112,7 +118,7 @@ export const useAnalysisHistory = () => {
     const clearHistory = useCallback(async () => {
         if (!user) return;
         
-        const currentHistory = [...history];
+        const currentHistory = [...historyRef.current];
         setHistory([]);
 
         if (!db) {
@@ -129,7 +135,7 @@ export const useAnalysisHistory = () => {
         } catch (error) {
             console.error("Error clearing history:", error);
         }
-    }, [user, history]);
+    }, [user]);
 
     return { history, addAnalysis, removeAnalysis, clearHistory };
 };

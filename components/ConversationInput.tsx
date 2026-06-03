@@ -9,7 +9,43 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { EXAMPLE_CONVERSATIONS } from '../constants';
 import PdfPreviewModal from './PdfPreviewModal';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://aistudiocdn.com/pdfjs-dist@^5.4.296/build/pdf.worker.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.mjs`;
+
+const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1024): Promise<string> => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth || height > maxHeight) {
+                if (width > height) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                } else {
+                    width = Math.round((width * maxHeight) / height);
+                    height = maxHeight;
+                }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(img, 0, 0, width, height);
+                // Compress as JPEG to save huge amount of bandwidth and token usage
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            } else {
+                resolve(base64Str);
+            }
+        };
+        img.onerror = () => {
+            resolve(base64Str);
+        };
+    });
+};
 
 interface ConversationInputProps {
     onAnalyze: (conversation: string, context: string, imageBase64?: string) => void;
@@ -28,10 +64,16 @@ const ConversationInput: React.FC<ConversationInputProps> = ({ onAnalyze, isLoad
         setConversation(prev => prev + transcript + ' ');
     }, []);
 
-    const { isListening, toggle: toggleListening } = useSpeechRecognition(handleSpeechResult);
+    const { isListening, isSupported, toggle: toggleListening } = useSpeechRecognition(handleSpeechResult);
 
     const handleSubmit = () => {
-        onAnalyze(conversation, context, imageBase64 || undefined);
+        let finalConversation = conversation;
+        const maxChars = 50000;
+        if (conversation && conversation.length > maxChars) {
+            finalConversation = conversation.slice(0, maxChars);
+            alert(`Huch, das ist aber ein langer Roman, mein Kind! Oma hat das Gespräch gekürzt auf die ersten ${maxChars} Zeichen, damit sie beim Lesen nicht einschläft.`);
+        }
+        onAnalyze(finalConversation, context, imageBase64 || undefined);
     };
 
     const handleClear = () => {
@@ -49,16 +91,47 @@ const ConversationInput: React.FC<ConversationInputProps> = ({ onAnalyze, isLoad
     const handleFile = (file: File) => {
         if (file.type === 'text/plain') {
             const reader = new FileReader();
-            reader.onload = (e) => setConversation(e.target?.result as string);
+            reader.onload = (e) => {
+                const text = e.target?.result as string;
+                const maxChars = 50000;
+                if (text && text.length > maxChars) {
+                    setConversation(text.slice(0, maxChars));
+                    alert(`Das ist eine Riesen-Textdatei! Oma liest nur die ersten ${maxChars} Zeichen, um ihre Augen zu schonen.`);
+                } else {
+                    setConversation(text || '');
+                }
+            };
             reader.readAsText(file);
         } else if (file.type === 'application/pdf') {
             setPdfFile(file);
         } else if (file.type.startsWith('image/')) {
             const reader = new FileReader();
-            reader.onload = (e) => setImageBase64(e.target?.result as string);
+            reader.onload = async (e) => {
+                const rawBase64 = e.target?.result as string;
+                try {
+                    const compressed = await resizeImage(rawBase64);
+                    setImageBase64(compressed);
+                } catch (err) {
+                    setImageBase64(rawBase64);
+                }
+            };
             reader.readAsDataURL(file);
         } else {
             alert("Oma kann nur .txt, .pdf oder Bilder lesen, mein Kind.");
+        }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const file = items[i].getAsFile();
+                if (file) {
+                    e.preventDefault();
+                    handleFile(file);
+                    break;
+                }
+            }
         }
     };
     
@@ -100,6 +173,7 @@ const ConversationInput: React.FC<ConversationInputProps> = ({ onAnalyze, isLoad
                                 rows={8}
                                 value={conversation}
                                 onChange={(e) => setConversation(e.target.value)}
+                                onPaste={handlePaste}
                                 placeholder="Text hier reinkopieren oder Screenshot hochladen..."
                                 className="mt-1 block w-full bg-slate-800/50 border-slate-700 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm placeholder-slate-500"
                             />
@@ -129,13 +203,15 @@ const ConversationInput: React.FC<ConversationInputProps> = ({ onAnalyze, isLoad
                     </button>
                     <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && handleFile(e.target.files[0])} className="hidden" accept=".txt,.pdf,image/*" />
 
-                    <button
-                        title={isListening ? "Aufnahme stoppen" : "Diktieren"}
-                        onClick={toggleListening}
-                        className={`h-10 w-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-slate-400 bg-slate-800/50 border border-slate-700 hover:bg-slate-700/50 hover:text-white'}`}
-                    >
-                        <MicIcon className="h-5 w-5" />
-                    </button>
+                    {isSupported && (
+                        <button
+                            title={isListening ? "Aufnahme stoppen" : "Diktieren"}
+                            onClick={toggleListening}
+                            className={`h-10 w-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-slate-400 bg-slate-800/50 border border-slate-700 hover:bg-slate-700/50 hover:text-white'}`}
+                        >
+                            <MicIcon className="h-5 w-5" />
+                        </button>
+                    )}
                     
                     <div className="flex-grow"></div>
                     <Button onClick={handleClear} variant="secondary">Leeren</Button>

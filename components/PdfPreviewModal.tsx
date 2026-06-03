@@ -34,7 +34,8 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ file, onClose, onExtr
                     canvas.width = viewport.width;
                     const renderContext = {
                         canvasContext: context,
-                        viewport: viewport
+                        viewport: viewport,
+                        canvas: canvas
                     };
                     await page.render(renderContext).promise;
                 }

@@ -10,8 +10,8 @@ import AdviceCard from './AdviceCard';
 import SentimentChart from './SentimentChart';
 import PrintPreviewModal from './PrintPreviewModal';
 import OmaChat from './OmaChat';
-import { BookOpenIcon, LightBulbIcon, DownloadIcon, SpeakerIcon } from './ui/Icons';
-import { generateOmaSpeech, playPcmAudio } from '../services/geminiService';
+import { BookOpenIcon, LightBulbIcon, DownloadIcon, SpeakerIcon, FileIcon } from './ui/Icons';
+import { generateOmaSpeech, playPcmAudio, stopCurrentSpeech } from '../services/geminiService';
 
 type AnalysisState = {
     status: 'idle' | 'loading' | 'success' | 'error';
@@ -36,18 +36,97 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
     );
     
     const result = state.data;
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+    const handleCopy = (text: string, index: number) => {
+        navigator.clipboard.writeText(text);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
 
     const handleReadFazit = async () => {
-        if (isSpeaking) return;
+        if (isSpeaking) {
+            await stopCurrentSpeech();
+            setIsSpeaking(false);
+            return;
+        }
         setIsSpeaking(true);
         try {
             const pcm = await generateOmaSpeech(result.omas_ratschlag.fazit);
             await playPcmAudio(pcm);
         } catch (err) {
             console.error(err);
+            setIsSpeaking(false);
         } finally {
             setIsSpeaking(false);
         }
+    };
+
+    const [isMarkdownCopied, setIsMarkdownCopied] = useState(false);
+
+    const generateMarkdown = (res: AnalysisResult): string => {
+        let md = `# Omas Narzissmus- & Manipulations-Analyse\n\n`;
+        md += `**Datum / Uhrzeit:** ${new Date(res.timestamp).toLocaleString('de-DE')}\n`;
+        md += `**Narzissmus-Score:** ${res.narzissmus_score}/100\n`;
+        if (res.manipulations_index !== undefined) {
+            md += `**Manipulations-Index:** ${res.manipulations_index}%\n`;
+        }
+        if (res.gaslighting_level) {
+            md += `**Gaslighting-Gefahr:** ${res.gaslighting_level}\n`;
+        }
+        md += `\n---\n\n`;
+        md += `## Omas Einschätzung\n`;
+        md += `> "${res.zusammenfassung}"\n\n`;
+        if (res.oma_sprichwort) {
+            md += `*Omas passendes Sprichwort:* **"${res.oma_sprichwort}"**\n\n`;
+        }
+        md += `---\n\n`;
+        md += `## Erkannte Verhaltensmuster & Taktiken\n\n`;
+        res.erkannte_muster.forEach(m => {
+            md += `### 🔍 ${m.muster_name}\n`;
+            md += `* **Zitat:** "${m.zitat}"\n`;
+            md += `* **Omas Erklärung:** ${m.erklaerung}\n\n`;
+        });
+        
+        if (res.gegenrede_tipps && res.gegenrede_tipps.length > 0) {
+            md += `---\n\n`;
+            md += `## Abgrenzung & Gegenrede (Grey Rocking)\n`;
+            md += `Sätze, mit denen du dich klar abgrenzt, ohne neues Futter für Machtspiele zu liefern:\n\n`;
+            res.gegenrede_tipps.forEach(sentence => {
+                md += `* *"${sentence}"*\n`;
+            });
+            md += `\n`;
+        }
+
+        md += `---\n\n`;
+        md += `## Omas Ratschlag & Fazit\n`;
+        md += `> "${res.omas_ratschlag.fazit}"\n\n`;
+        md += `### Praktische Tipps:\n`;
+        res.omas_ratschlag.tipps.forEach(tipp => {
+            md += `* **${tipp.titel}:** ${tipp.text}\n`;
+        });
+        
+        md += `\n\n---\n*Generiert mit ❤️ von Crazy Omas Narzissmus-Analyse*`;
+        return md;
+    };
+
+    const handleDownloadMarkdown = () => {
+        const markdownText = generateMarkdown(result);
+        const blob = new Blob([markdownText], { type: 'text/markdown;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `omas-narzissmus-analyse-${result.id.slice(0, 8)}.md`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleCopyMarkdown = () => {
+        const markdownText = generateMarkdown(result);
+        navigator.clipboard.writeText(markdownText);
+        setIsMarkdownCopied(true);
+        setTimeout(() => setIsMarkdownCopied(false), 2000);
     };
 
     return (
@@ -57,17 +136,24 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
             </div>
             
             <Card padding="lg">
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                     <div>
                         <h2 className="text-3xl font-bold font-serif text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
                             Omas Analyse
                         </h2>
                         <p className="text-slate-500 text-xs mt-1 italic">Vom {new Date(result.timestamp).toLocaleString('de-DE')}</p>
                     </div>
-                    <div className="flex gap-2">
-                         <Button variant="secondary" size="sm" onClick={() => setIsPrintModalOpen(true)}>
-                            <DownloadIcon className="h-4 w-4 mr-2" />
-                            Export
+                    <div className="flex flex-wrap gap-2">
+                         <Button variant="secondary" size="xs" onClick={() => setIsPrintModalOpen(true)} className="text-xs py-1.5 px-3">
+                            <span className="text-sm mr-1">🖨️</span> Print / PDF
+                        </Button>
+                         <Button variant="secondary" size="xs" onClick={handleDownloadMarkdown} className="text-xs py-1.5 px-3">
+                            <DownloadIcon className="h-3.5 w-3.5 mr-1 text-purple-400 inline-block align-middle" />
+                            Markdown laden
+                        </Button>
+                         <Button variant="secondary" size="xs" onClick={handleCopyMarkdown} className="text-xs py-1.5 px-3">
+                            <FileIcon className="h-3.5 w-3.5 mr-1 text-pink-400 inline-block align-middle" />
+                            {isMarkdownCopied ? 'Kopiert!' : 'Kopieren'}
                         </Button>
                     </div>
                 </div>
@@ -79,6 +165,88 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
                         <p className="text-slate-300 italic leading-relaxed">"{result.zusammenfassung}"</p>
                     </div>
                 </div>
+
+                {/* NEU: Omas Detektor-Details & Gegenrede */}
+                {(result.manipulations_index !== undefined || result.gaslighting_level !== undefined || result.oma_sprichwort !== undefined || result.gegenrede_tipps !== undefined) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 animate-fade-in-up">
+                        {/* Detail-Werte & Sprichwort */}
+                        <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-800/60 flex flex-col justify-between">
+                            <div className="space-y-4">
+                                <h3 className="font-bold text-white text-md flex items-center gap-2">
+                                    <span className="text-xl">🕵️‍♀️</span> Omas Detektor-Details
+                                </h3>
+                                
+                                {result.manipulations_index !== undefined && (
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1 text-xs text-slate-400">
+                                            <span>Manipulations-Index</span>
+                                            <span className="font-mono text-purple-400 font-semibold">{result.manipulations_index}%</span>
+                                        </div>
+                                        <div className="w-full bg-slate-850 rounded-full h-2 overflow-hidden">
+                                            <div 
+                                                className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-1000" 
+                                                style={{ width: `${result.manipulations_index}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {result.gaslighting_level && (
+                                    <div className="flex justify-between items-center bg-slate-950/40 p-3 rounded-lg border border-slate-800/80">
+                                        <span className="text-xs text-slate-400">Gaslighting-Gefahr</span>
+                                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold font-mono ${
+                                            result.gaslighting_level === "Extrem" || result.gaslighting_level === "Hoch"
+                                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                                : result.gaslighting_level === "Mittel"
+                                                ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                                                : "bg-green-500/10 text-green-400 border border-green-500/20"
+                                        }`}>
+                                            {result.gaslighting_level}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {result.oma_sprichwort && (
+                                <div className="mt-4 pt-4 border-t border-slate-850 italic text-slate-300 text-sm flex items-start gap-2 bg-purple-950/10 p-3 rounded-lg border border-purple-900/20">
+                                    <span className="text-xl leading-none text-purple-400">“</span>
+                                    <div>
+                                        <p className="font-serif text-slate-300 leading-relaxed">"{result.oma_sprichwort}"</p>
+                                        <span className="text-[10px] text-purple-400 tracking-wider font-semibold block mt-1 uppercase">Omas Weisheit</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Vorschläge zur Gegenrede / Abgrenzung */}
+                        {result.gegenrede_tipps && result.gegenrede_tipps.length > 0 && (
+                            <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-800/60">
+                                <h3 className="font-bold text-white text-md mb-2 flex items-center gap-2">
+                                    <span className="text-xl">🛡️</span> Abgrenzung & Gegenrede
+                                </h3>
+                                <p className="text-slate-400 text-xs mb-4">
+                                    Sätze, mit denen du dich klar abgrenzt, ohne neues Futter für Machtspiele zu liefern (Grey Rocking):
+                                </p>
+                                <div className="space-y-2.5">
+                                    {result.gegenrede_tipps.map((sentence, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className="group/item flex items-center justify-between gap-3 bg-slate-950/20 hover:bg-slate-950/50 p-2.5 rounded-lg border border-slate-800/85 hover:border-purple-900/40 transition-all"
+                                        >
+                                            <p className="text-xs text-slate-200 italic leading-relaxed">"{sentence}"</p>
+                                            <button 
+                                                onClick={() => handleCopy(sentence, idx)}
+                                                className={`text-[10px] px-2.5 py-1 rounded transition-all font-semibold pointer-events-auto ${copiedIndex === idx ? "bg-purple-500 text-white" : "bg-slate-800 hover:bg-purple-600/30 text-slate-300 hover:text-white"}`}
+                                            >
+                                                {copiedIndex === idx ? "Kopiert!" : "Kopieren"}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <section className="mb-10">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -127,7 +295,7 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
                 </section>
 
                 {/* NEU: Interaktives Chat-Stübchen */}
-                <OmaChat analysisId={result.id} />
+                <OmaChat result={result} />
             </Card>
 
             {isPrintModalOpen && <PrintPreviewModal result={result} onClose={() => setIsPrintModalOpen(false)} />}

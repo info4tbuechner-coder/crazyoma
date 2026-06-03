@@ -26,6 +26,10 @@ export interface AnalysisResult {
     timestamp: number;
     zusammenfassung: string;
     narzissmus_score: number;
+    manipulations_index?: number; // NEU: 0-100% Prozent
+    gaslighting_level?: string;   // NEU: Gering, Mittel, Hoch, Extrem
+    oma_sprichwort?: string;      // NEU: Ein passendes norddeutsches Sprichwort
+    gegenrede_tipps?: string[];   // NEU: Konkrete Mustersätze zum Kontern
     erkannte_muster: NarcissisticPattern[];
     sentiment_flow: SentimentPoint[];
     omas_ratschlag: {

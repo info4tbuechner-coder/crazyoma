@@ -50,8 +50,10 @@ const App: React.FC = () => {
             const result = await analyzeConversation(conversation, context, imageBase64);
             setAnalysisState({ status: 'success', data: result, error: null });
             addAnalysis(result);
-        } catch (err) {
-            setAnalysisState({ status: 'error', data: null, error: "Omas Brille ist beschlagen. Versuch's nochmal!" });
+        } catch (err: any) {
+            console.error("Analyse fehlgeschlagen:", err);
+            const errMsg = err?.message || "Omas Brille ist beschlagen. Versuch's nochmal!";
+            setAnalysisState({ status: 'error', data: null, error: errMsg });
         }
     }, [addAnalysis]);
 
