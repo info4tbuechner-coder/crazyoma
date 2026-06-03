@@ -34,7 +34,7 @@ const chatSessions = new Map<string, Chat>();
 
 export const analyzeConversation = async (conversation: string, context: string, imageBase64?: string): Promise<AnalysisResult> => {
     // Sorge dafür, dass übermäßig lange Texte Omas Augen (und die Token-Grenzen von Gemini) nicht überfordern
-    const maxChars = 55000;
+    const maxChars = 300000;
     let safeConversation = conversation || '';
     if (safeConversation.length > maxChars) {
         safeConversation = safeConversation.slice(0, maxChars) + "\n\n[... Oma-Hinweis: Das Gespräch wurde gekürzt, da es zu lang war! ...]";

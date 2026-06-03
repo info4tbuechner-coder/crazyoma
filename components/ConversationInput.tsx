@@ -68,7 +68,7 @@ const ConversationInput: React.FC<ConversationInputProps> = ({ onAnalyze, isLoad
 
     const handleSubmit = () => {
         let finalConversation = conversation;
-        const maxChars = 50000;
+        const maxChars = 300000;
         if (conversation && conversation.length > maxChars) {
             finalConversation = conversation.slice(0, maxChars);
             alert(`Huch, das ist aber ein langer Roman, mein Kind! Oma hat das Gespräch gekürzt auf die ersten ${maxChars} Zeichen, damit sie beim Lesen nicht einschläft.`);
@@ -93,7 +93,7 @@ const ConversationInput: React.FC<ConversationInputProps> = ({ onAnalyze, isLoad
             const reader = new FileReader();
             reader.onload = (e) => {
                 const text = e.target?.result as string;
-                const maxChars = 50000;
+                const maxChars = 300000;
                 if (text && text.length > maxChars) {
                     setConversation(text.slice(0, maxChars));
                     alert(`Das ist eine Riesen-Textdatei! Oma liest nur die ersten ${maxChars} Zeichen, um ihre Augen zu schonen.`);

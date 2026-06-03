@@ -12,6 +12,8 @@ import PrintPreviewModal from './PrintPreviewModal';
 import OmaChat from './OmaChat';
 import { BookOpenIcon, LightBulbIcon, DownloadIcon, SpeakerIcon, FileIcon } from './ui/Icons';
 import { generateOmaSpeech, playPcmAudio, stopCurrentSpeech } from '../services/geminiService';
+import { useAuth } from '../AuthContext';
+import { createOmaSpreadsheet, appendAnalysisToSheet } from '../services/googleSheetsService';
 
 type AnalysisState = {
     status: 'idle' | 'loading' | 'success' | 'error';
@@ -26,6 +28,62 @@ interface AnalysisDisplayProps {
 const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const { googleAccessToken, loginWithGoogle, isGoogleLoading, user } = useAuth();
+    
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncMessage, setSyncMessage] = useState<string | null>(null);
+    const [syncError, setSyncError] = useState<string | null>(null);
+    const [spreadsheetInfo, setSpreadsheetInfo] = useState<{ spreadsheetId: string, spreadsheetUrl: string } | null>(() => {
+        const stored = localStorage.getItem(`google_sheets_info_${user?.uid || 'default'}`);
+        return stored ? JSON.parse(stored) : null;
+    });
+
+    const handleSyncToSheets = async () => {
+        if (!state.data) return;
+        setIsSyncing(true);
+        setSyncMessage(null);
+        setSyncError(null);
+
+        try {
+            let currentToken = googleAccessToken;
+            
+            // Wenn der Nutzer noch nicht in dieser Session mit Google angemeldet war, anfordern
+            if (!currentToken) {
+                setSyncMessage("Oma bereitet die Google-Anmeldung vor...");
+                await loginWithGoogle();
+                // Nach erfolgreichem Login wird der Token gesetzt. Wir holen ihn direkt aus dem AuthContext 
+                // bzw. warten auf den nächsten Render. Um nahtlos weiterzumachen, weisen wir den Nutzer darauf hin, 
+                // die Aufzeichnung nochmals zu aktivieren oder wir holen ihn direkt.
+                setSyncMessage("Anmeldung erfolgreich! Klicke jetzt auf 'Eintragen', um zu speichern.");
+                setIsSyncing(false);
+                return;
+            }
+
+            let activeId = spreadsheetInfo?.spreadsheetId;
+            let activeUrl = spreadsheetInfo?.spreadsheetUrl;
+
+            if (!activeId) {
+                setSyncMessage("Oma legt ein neues Tagebuch für dich an... 📝");
+                const newSheet = await createOmaSpreadsheet(currentToken);
+                activeId = newSheet.spreadsheetId;
+                activeUrl = newSheet.spreadsheetUrl;
+                
+                const info = { spreadsheetId: activeId, spreadsheetUrl: activeUrl };
+                setSpreadsheetInfo(info);
+                localStorage.setItem(`google_sheets_info_${user?.uid || 'default'}`, JSON.stringify(info));
+            }
+
+            setSyncMessage("Ergebnisse werden eingetragen... 👵✍️");
+            await appendAnalysisToSheet(currentToken, activeId, state.data);
+            
+            setSyncMessage(`Erfolgreich ins Tagebuch eingetragen! 🎉`);
+        } catch (err: any) {
+            console.error("Sheets sync failed:", err);
+            setSyncError(err?.message || "Omas Feder ist abgebrochen! Konnte nicht in Google Sheets schreiben.");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     if (state.status === 'loading') return <ResultsSkeleton />;
     if (state.status === 'error') return (
@@ -133,6 +191,53 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
         <div className="space-y-6">
             <div className="bg-yellow-900/40 border border-yellow-700/50 text-yellow-200/80 px-4 py-2 rounded-lg text-xs" role="alert">
                 <p><strong>Hinweis von Oma:</strong> Das ist Lebenserfahrung, keine Diagnose. Wenn es brennt, geh bitte zum Profi.</p>
+            </div>
+
+            {/* Google Sheets Sync Bar - NEU */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md animate-fade-in-up">
+                <div className="flex gap-3 items-start md:items-center">
+                    <span className="text-3xl select-none">📊</span>
+                    <div>
+                        <h4 className="text-white text-sm font-semibold flex items-center gap-1.5">
+                            Omas Google-Sheets Tagebuch
+                            <span className="bg-green-500/10 text-green-400 border border-green-500/20 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                                Live-Verbindung
+                            </span>
+                        </h4>
+                        <p className="text-slate-400 text-xs mt-0.5">
+                            Sichere deine Analysen live in einer Google-Tabelle als persönliches Tagebuch.
+                        </p>
+                        {syncMessage && (
+                            <p className="text-purple-400 text-xs mt-1.5 font-medium animate-pulse">
+                                👵: "{syncMessage}"
+                            </p>
+                        )}
+                        {syncError && (
+                            <p className="text-red-400 text-xs mt-1.5 font-medium">
+                                👵: "{syncError}"
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center self-end md:self-center">
+                    {spreadsheetInfo?.spreadsheetUrl && (
+                        <a 
+                            href={spreadsheetInfo.spreadsheetUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="bg-purple-950/40 border border-purple-500/30 text-purple-300 hover:bg-purple-900/40 text-xs font-semibold py-1.5 px-3 rounded-md shadow-sm transition-all flex items-center gap-1"
+                        >
+                            <span>📝</span> Tagebuch öffnen ↗
+                        </a>
+                    )}
+                    <Button 
+                        onClick={handleSyncToSheets} 
+                        disabled={isSyncing || isGoogleLoading}
+                        className="text-xs font-bold py-1.5 px-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 border-0"
+                    >
+                        {isSyncing ? 'Oma schreibt...' : (!googleAccessToken ? 'Mit Google verbinden & eintragen' : 'In Sheets eintragen')}
+                    </Button>
+                </div>
             </div>
             
             <Card padding="lg">

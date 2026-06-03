@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, isConfigured } from './services/firebase';
 
 export interface AppUser {
@@ -14,6 +14,9 @@ interface AuthContextType {
     loginWithEmailPassword: (email: string, password: string) => Promise<void>;
     signUpWithEmailPassword: (email: string, password: string) => Promise<void>;
     isConfigured: boolean;
+    googleAccessToken: string | null;
+    loginWithGoogle: () => Promise<void>;
+    isGoogleLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -23,11 +26,16 @@ const AuthContext = createContext<AuthContextType>({
     loginWithEmailPassword: async () => {},
     signUpWithEmailPassword: async () => {},
     isConfigured: false,
+    googleAccessToken: null,
+    loginWithGoogle: async () => {},
+    isGoogleLoading: false,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AppUser | null>(null);
     const [loading, setLoading] = useState(true);
+    const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
     useEffect(() => {
         if (!auth || !isConfigured) {
@@ -52,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
             } else {
                 setUser(null);
+                setGoogleAccessToken(null); // Clear access token when user signs out
             }
             setLoading(false);
         });
@@ -132,15 +141,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(sessionUser);
     };
 
+    const loginWithGoogle = async () => {
+        setIsGoogleLoading(true);
+        try {
+            if (auth && isConfigured) {
+                const provider = new GoogleAuthProvider();
+                provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+                const result = await signInWithPopup(auth, provider);
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                if (credential?.accessToken) {
+                    setGoogleAccessToken(credential.accessToken);
+                }
+                if (result.user) {
+                    setUser({
+                        uid: result.user.uid,
+                        email: result.user.email
+                    });
+                }
+                return;
+            }
+
+            // Simulator if not configured
+            const mockToken = "mock_google_sheets_token_" + Math.random().toString(36).substring(7);
+            setGoogleAccessToken(mockToken);
+            const loggedInUser = { uid: 'local_google_user', email: 'enkel.sheets@gmail.com' };
+            localStorage.setItem('crazy_oma_local_session', JSON.stringify(loggedInUser));
+            setUser(loggedInUser);
+        } catch (err: any) {
+            console.error("Google Sign-In failed:", err);
+            throw err;
+        } finally {
+            setIsGoogleLoading(false);
+        }
+    };
+
     const logout = async () => {
         if (auth && isConfigured) {
             await signOut(auth);
             setUser(null);
+            setGoogleAccessToken(null);
             return;
         }
 
         localStorage.removeItem('crazy_oma_local_session');
         setUser(null);
+        setGoogleAccessToken(null);
     };
 
     return (
@@ -150,7 +195,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             logout,
             loginWithEmailPassword,
             signUpWithEmailPassword,
-            isConfigured
+            isConfigured,
+            googleAccessToken,
+            loginWithGoogle,
+            isGoogleLoading
         }}>
             {children}
         </AuthContext.Provider>
