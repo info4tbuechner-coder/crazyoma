@@ -12,3 +12,53 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(147, 51, 234, 0.5);
 }
+
+/* Druckfreundliche Ansichten für PDF- und Papier-Export */
+@media print {
+  /* Ignoriere reguläre App-Elemente und zeige nur den zu druckenden Inhalt */
+  body > :not(#print-root) {
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+  
+  #print-root {
+    display: block !important;
+    visibility: visible !important;
+    background: #ffffff !important;
+    color: #1f2937 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Browser-Vorgaben für den Farbdruck erzwingen */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Seitenumbruchsteuerung für saubere Dokumente */
+  blockquote, section, .card, tr, pre, img {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  
+  h1, h2, h3 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  p, li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm;
+  }
+}
+

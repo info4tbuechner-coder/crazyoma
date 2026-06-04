@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './AuthContext';
+import { LanguageProvider } from './LanguageContext';
 
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
@@ -23,7 +24,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AuthProvider>
-      <App />
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
     </AuthProvider>
   </React.StrictMode>
 );

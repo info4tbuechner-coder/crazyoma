@@ -176,10 +176,25 @@ Bitte beziehe dich direkt auf diesen analysierten Dialog und diese Daten, wenn d
     return response.text;
 };
 
-export const generateOmaSpeech = async (text: string): Promise<Uint8Array> => {
+export const generateOmaSpeech = async (text: string, language: 'de' | 'ru' = 'de'): Promise<Uint8Array> => {
+    let textToSpeak = text;
+
+    if (language === 'ru') {
+        // Explizite Übersetzung mit einem Standard-Modell
+        const transResponse = await getAi().models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: [{ parts: [{ text: `Übersetze den folgenden Text in natürliches, freundliches Russisch, passend für eine weise Oma. Gib nur die Übersetzung aus:\n\n"${text}"` }] }]
+        });
+        textToSpeak = transResponse.text || text;
+    }
+
+    const langInstruction = language === 'ru' 
+        ? "Sag auf Russisch mit der Stimme einer weisen Oma:" 
+        : "Sag mit der Stimme einer weisen, norddeutschen Oma:";
+
     const response = await getAi().models.generateContent({
         model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: `Sag mit der Stimme einer weisen, norddeutschen Oma: ${text}` }] }],
+        contents: [{ parts: [{ text: `${langInstruction} ${textToSpeak}` }] }],
         config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: {

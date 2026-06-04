@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { AnalysisResult } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
@@ -13,7 +13,34 @@ import OmaChat from './OmaChat';
 import { BookOpenIcon, LightBulbIcon, DownloadIcon, SpeakerIcon, FileIcon } from './ui/Icons';
 import { generateOmaSpeech, playPcmAudio, stopCurrentSpeech } from '../services/geminiService';
 import { useAuth } from '../AuthContext';
-import { createOmaSpreadsheet, appendAnalysisToSheet } from '../services/googleSheetsService';
+import { createOmaSpreadsheet, appendAnalysisToSheet, formatAnalysisForColumns } from '../services/googleSheetsService';
+
+type AnalysisState = {
+    status: 'idle' | 'loading' | 'success' | 'error';
+    data: AnalysisResult | null;
+    error: string | null;
+};
+
+interface AnalysisDisplayProps {
+    state: AnalysisState;
+}
+
+import React, { useState, useEffect } from 'react';
+import type { AnalysisResult } from '../types';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import ResultsSkeleton from './ResultsSkeleton';
+import ScoreGauge from './ScoreGauge';
+import PatternCard from './PatternCard';
+import AdviceCard from './AdviceCard';
+import SentimentChart from './SentimentChart';
+import PrintPreviewModal from './PrintPreviewModal';
+import OmaChat from './OmaChat';
+import { BookOpenIcon, LightBulbIcon, DownloadIcon, SpeakerIcon, FileIcon } from './ui/Icons';
+import { generateOmaSpeech, playPcmAudio, stopCurrentSpeech } from '../services/geminiService';
+import { useAuth } from '../AuthContext';
+import { createOmaSpreadsheet, appendAnalysisToSheet, formatAnalysisForColumns } from '../services/googleSheetsService';
+import { useLanguage } from '../LanguageContext';
 
 type AnalysisState = {
     status: 'idle' | 'loading' | 'success' | 'error';
@@ -26,8 +53,13 @@ interface AnalysisDisplayProps {
 }
 
 const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
+    const { language, setLanguage, t } = useLanguage();
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const [isMarkdownCopied, setIsMarkdownCopied] = useState(false);
+    const [isSheetsCopied, setIsSheetsCopied] = useState(false);
+
     const { googleAccessToken, loginWithGoogle, isGoogleLoading, user } = useAuth();
     
     const [isSyncing, setIsSyncing] = useState(false);
@@ -38,6 +70,11 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
         return stored ? JSON.parse(stored) : null;
     });
 
+    useEffect(() => {
+        const stored = localStorage.getItem(`google_sheets_info_${user?.uid || 'default'}`);
+        setSpreadsheetInfo(stored ? JSON.parse(stored) : null);
+    }, [user?.uid]);
+
     const handleSyncToSheets = async () => {
         if (!state.data) return;
         setIsSyncing(true);
@@ -47,13 +84,9 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
         try {
             let currentToken = googleAccessToken;
             
-            // Wenn der Nutzer noch nicht in dieser Session mit Google angemeldet war, anfordern
             if (!currentToken) {
                 setSyncMessage("Oma bereitet die Google-Anmeldung vor...");
                 await loginWithGoogle();
-                // Nach erfolgreichem Login wird der Token gesetzt. Wir holen ihn direkt aus dem AuthContext 
-                // bzw. warten auf den nächsten Render. Um nahtlos weiterzumachen, weisen wir den Nutzer darauf hin, 
-                // die Aufzeichnung nochmals zu aktivieren oder wir holen ihn direkt.
                 setSyncMessage("Anmeldung erfolgreich! Klicke jetzt auf 'Eintragen', um zu speichern.");
                 setIsSyncing(false);
                 return;
@@ -94,7 +127,6 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
     );
     
     const result = state.data;
-    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
     const handleCopy = (text: string, index: number) => {
         navigator.clipboard.writeText(text);
@@ -110,7 +142,7 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
         }
         setIsSpeaking(true);
         try {
-            const pcm = await generateOmaSpeech(result.omas_ratschlag.fazit);
+            const pcm = await generateOmaSpeech(result.omas_ratschlag.fazit, language);
             await playPcmAudio(pcm);
         } catch (err) {
             console.error(err);
@@ -120,7 +152,6 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
         }
     };
 
-    const [isMarkdownCopied, setIsMarkdownCopied] = useState(false);
 
     const generateMarkdown = (res: AnalysisResult): string => {
         let md = `# Omas Narzissmus- & Manipulations-Analyse\n\n`;
@@ -187,6 +218,25 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
         setTimeout(() => setIsMarkdownCopied(false), 2000);
     };
 
+    const handleCopyForSheets = () => {
+        try {
+            const columns = formatAnalysisForColumns(result);
+            const escapedColumns = columns.map(col => {
+                const strVal = col === null || col === undefined ? '' : String(col);
+                if (strVal.includes('"') || strVal.includes('\t') || strVal.includes('\n') || strVal.includes('\r')) {
+                    return `"${strVal.replace(/"/g, '""')}"`;
+                }
+                return strVal;
+            });
+            const tsvRow = escapedColumns.join('\t');
+            navigator.clipboard.writeText(tsvRow);
+            setIsSheetsCopied(true);
+            setTimeout(() => setIsSheetsCopied(false), 2000);
+        } catch (err) {
+            console.error("Sheets copy failed:", err);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="bg-yellow-900/40 border border-yellow-700/50 text-yellow-200/80 px-4 py-2 rounded-lg text-xs" role="alert">
@@ -230,6 +280,12 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
                             <span>📝</span> Tagebuch öffnen ↗
                         </a>
                     )}
+                    <button 
+                        onClick={handleCopyForSheets}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:text-white px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                    >
+                        <span>📋</span> {isSheetsCopied ? 'Kopiert!' : 'Zeile kopieren (Manuell)'}
+                    </button>
                     <Button 
                         onClick={handleSyncToSheets} 
                         disabled={isSyncing || isGoogleLoading}
@@ -259,6 +315,10 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
                          <Button variant="secondary" size="xs" onClick={handleCopyMarkdown} className="text-xs py-1.5 px-3">
                             <FileIcon className="h-3.5 w-3.5 mr-1 text-pink-400 inline-block align-middle" />
                             {isMarkdownCopied ? 'Kopiert!' : 'Kopieren'}
+                        </Button>
+                        <Button variant="secondary" size="xs" onClick={handleCopyForSheets} className="text-xs py-1.5 px-3">
+                            <span className="text-sm mr-1">📋</span>
+                            {isSheetsCopied ? 'Zeile kopiert!' : 'Sheets-Zeile'}
                         </Button>
                     </div>
                 </div>
@@ -390,8 +450,18 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ state }) => {
                             className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border transition-all ${isSpeaking ? 'bg-pink-500 border-pink-400 text-white animate-pulse' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'}`}
                         >
                             <SpeakerIcon className="h-3.5 w-3.5" />
-                            {isSpeaking ? 'Oma spricht...' : 'Fazit vorlesen'}
+                            {isSpeaking ? 'Oma spricht...' : 'Fazit vorlesen (' + selectedLanguage.toUpperCase() + ')'}
                         </button>
+                        <div className="flex bg-slate-800 rounded-full p-1">
+                            <button 
+                                onClick={() => setSelectedLanguage('de')}
+                                className={`px-2 py-1 rounded-full text-[10px] font-bold ${selectedLanguage === 'de' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}
+                            >DE</button>
+                            <button 
+                                onClick={() => setSelectedLanguage('ru')}
+                                className={`px-2 py-1 rounded-full text-[10px] font-bold ${selectedLanguage === 'ru' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}
+                            >RU</button>
+                        </div>
                     </div>
                     <p className="bg-pink-900/20 border-l-4 border-pink-500 p-4 rounded-r-lg text-slate-300 italic mb-4">"{result.omas_ratschlag.fazit}"</p>
                     <div className="grid gap-3 sm:grid-cols-2">
